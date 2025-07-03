@@ -14,6 +14,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { Button, Typography } from '@mui/material'
 import { TextField } from '@mui/material';
+import { generateDummyCandleData } from './generateDummyData';
 
 
 function App() {
