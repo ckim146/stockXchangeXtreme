@@ -5,7 +5,7 @@ import './App.css'
 // import Highcharts, { color } from 'highcharts'
 import * as Highcharts from "highcharts/highstock";
 import HighchartsReact from 'highcharts-react-official'
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ibmData from './ibmData.json'
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -17,12 +17,15 @@ import { TextField } from '@mui/material';
 
 
 function App() {
-  const [priceData, setPriceData] = useState([])
-  const [candleData, setCandleData] = useState([])
+  const [priceData, setPriceData] = useState([]);
+  const [candleData, setCandleData] = useState([]);
+  const [minPrice, setMinPrice] = useState(0);
+  const [maxPrice, setMaxPrice] = useState(0);
   const secondaryColor = 'rgb(240, 240, 255)';
   const mainColor = 'rgb(40, 40, 40)';
   const symbol = 'IBM';
-  const chartComponentRef = useRef();
+  const chartRef = useRef();
+  const dayMs = 24 * 3600 * 1000;
 
   //Config for the marker
   const markerData = [
@@ -37,8 +40,20 @@ function App() {
       }
     }
   ];
+
+  // Init fixed values for X Axis
+  const candleInterval = 24 * 60 * 60 * 1000;
+  const windowSize = candleInterval * 30;
+  const initialTimestamp = candleData.length > 0 ? candleData[0][0] : Date.now();
+  let currentMin = initialTimestamp;
+  let currentMax = initialTimestamp + windowSize;
+  console.log('currentMin:', new Date(currentMin), 'currentMax:', new Date(currentMax));
+
+
   //Config for the chart
   const options = {
+    navigator: { enabled: false },
+    scrollbar: { enabled: false },
     chart: {
       backgroundColor: {
         linearGradient: [0, 0, 700, 700],
@@ -54,6 +69,9 @@ function App() {
       plotBorderWidth: 1
     },
     xAxis: {
+      type: 'datetime',
+      // min: currentMin,
+      // max: currentMax,
       ordinal: false,
       labels: {
         style: {
@@ -67,6 +85,8 @@ function App() {
     },
     yAxis: {
       opposite: false,
+      min: minPrice,
+      max: maxPrice,
       title: {
         text: 'Price',
         style: {
@@ -82,8 +102,6 @@ function App() {
         style: {
           color: secondaryColor
         },
-
-
       }
     },
     title: {
@@ -169,6 +187,10 @@ function App() {
     startDate = new Date(dateBank[0][0]);
     endDate = new Date(dateBank[0][1]);
 
+    // Local tracking variables
+    let localMin = Number.POSITIVE_INFINITY;
+    let localMax = Number.NEGATIVE_INFINITY;
+
     //Extract average price for date range. Initiate tempdata
     while (startDate <= endDate) {
       let tempData = dateObj[startDate.toISOString().split('T')[0]];
@@ -178,6 +200,10 @@ function App() {
         const high = Number(tempData["2. high"]);
         const low = Number(tempData["3. low"]);
         const close = Number(tempData["4. close"]);
+
+        //Find min and max value
+        if (low < localMin) localMin = low;
+        if (high > localMax) localMax = high;
 
         //Push the average to the priceAvgs array
         priceAvgs.push(open + close / 2);
@@ -194,19 +220,78 @@ function App() {
       console.log(exactTimestamp);
 
     }
+    //Set Y axis min and max
+    const yPadding = 5;
     //Set the state variables to the data constructed from API call
     setPriceData(priceAvgs);
     setCandleData(candleData);
+    setMinPrice(localMin - yPadding);
+    setMaxPrice(localMax + yPadding);
   }
 
   useEffect(() => { getData(); }, []);
 
-  //   const theme = {
-  //   spacing: 8,
-  // }
+
+  //Handler for starting the trade
+  function handleTradeClick() {
+    const chart = chartRef.current?.chart;
+    if (!chart) return;
+    const lastDateStr = dateBank[0][1];  // "2025-06-02"
+    const lastDate = new Date(lastDateStr); // create a Date object
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(lastDate.getDate() + 1);  // add 1 day
+
+    const nextTimestamp = nextDate.getTime();  // milliseconds since epoch
+    console.log("min max price: ", minPrice, maxPrice);
+
+    const interval = setInterval(() => {
+      const newPoint = [nextTimestamp + 1, 257.85, 263, 257, 263]; // example data
+      const series = chart.series[0];
+      const maxPoints = 1;
+      // const dayMs = 24 * 3600 * 1000;
+      // const fixedMin = new Date(dateBank[0][0]).getTime();
+      // //Pad the Max X value
+      // const range = nextTimestamp - fixedMin;
+      // const paddedMax = nextTimestamp + range * 0.5;
+
+      // Recalculate visible window every tick
+      const windowDuration = 30 * 24 * 3600 * 1000; // 30 days in ms
+      const fixedMin = nextTimestamp - windowDuration;
+      const paddedMax = nextTimestamp + (windowDuration * 0.5);
+
+      chart.xAxis[0].setExtremes(fixedMin, paddedMax, true, false);
+      chart.yAxis[0].setExtremes(minPrice, maxPrice, true, false);
+
+
+      series.addPoint(newPoint, true, series.data.length >= maxPoints);
+
+      //Make the axis fixed as points are added
+      chart.yAxis[0].setExtremes(minPrice, maxPrice, true, false);
+      chart.xAxis[0].setExtremes(fixedMin, paddedMax, true, false);
+      clearInterval(interval);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  };
+
+  //Make a MUI object to center the entire webpage
+  function CenteredBox({ children }) {
+    return (
+      <Box
+        sx={{
+          height: '100vh',          // Full viewport height
+          display: 'flex',          // Flexbox layout
+          justifyContent: 'center', // Center horizontally
+          alignItems: 'center',     // Center vertically
+        }}
+      >
+        {children}
+      </Box>
+    );
+  }
 
   return (
-    <>
+    <CenteredBox>
       <Box sx={{ display: 'flex', flexDirection: 'row', width: '90vw', justifyContent: 'center', alignItems: 'flex-start', gap: 2, }}>
         <Box sx={{ display: 'flex', flexDirection: 'row', width: '60vw', justifyContent: 'center', alignItems: 'center' }}>
           <Paper sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', mr: 5 }}>
@@ -221,8 +306,10 @@ function App() {
               $ <TextField label="Amount" type="number" variant="outlined" />
             </Box>
             <Typography>Trade!</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', my: 2, py: 2 }}>
-              <Button variant="outlined" color="error" sx={{ '&:hover': { backgroundColor: 'red', color: secondaryColor } }}>Close Position</Button>
+            <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', my: 2, py: 2 }}>
+              <Button variant="outlined" color="success" sx={{ '&:hover': { backgroundColor: 'green', color: secondaryColor }, my: 3 }} onClick={handleTradeClick}>Let's Trade!</Button>
+              <Button variant="outlined" color="error" sx={{ '&:hover': { backgroundColor: 'red', color: secondaryColor } }} >Close Position</Button>
+
             </Box>
           </Paper>
         </Box>
@@ -231,7 +318,7 @@ function App() {
             highcharts={Highcharts}
             constructorType={'stockChart'}
             options={options}
-            ref={chartComponentRef}
+            ref={chartRef}
             containerProps={{ style: { width: '100%', height: '60vh' } }}
           />
           <Box sx={{ display: 'inline-flex', flexDirection: 'row', width: '50vw', justifyContent: 'flex-start', flexWrap: 'wrap', gap: 2, mt: 2 }}>
@@ -241,7 +328,7 @@ function App() {
           </Box>
         </Box>
       </Box>
-    </>
+    </CenteredBox>
   )
 }
 
