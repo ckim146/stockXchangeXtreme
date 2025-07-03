@@ -11,6 +11,9 @@ import Grid from '@mui/material/Grid';
 import { styled } from '@mui/material/styles';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import { Button, Typography } from '@mui/material'
+import { TextField } from '@mui/material';
+
 
 function App() {
   const [priceData, setPriceData] = useState([])
@@ -26,6 +29,7 @@ function App() {
           [1, secondaryColor]
         ]
       },
+      animation: Highcharts.svg,
       borderWidth: 1,
       plotBackgroundColor: mainColor,
       plotShadow: true,
@@ -36,7 +40,9 @@ function App() {
         style: {
           color: secondaryColor
         }
-      }
+      },
+      minPadding: 0,
+      maxPadding: 0.1,
     },
     yAxis: {
       title: {
@@ -111,43 +117,44 @@ function App() {
 
   useEffect(() => { getData(); }, []);
 
-  //Styling for each item in the grids
-  const Item = styled(Paper)(({ theme }) => ({
-  backgroundColor: mainColor,
-  ...theme.typography.body2,
-  padding: theme.spacing(1),
-  textAlign: 'left',
-  color: secondaryColor,
-  ...theme.applyStyles('dark', {
-    backgroundColor: '#1A2027',
-  }),
-}));
+  //   const theme = {
+  //   spacing: 8,
+  // }
 
   return (
     <>
-    {/* <Stack direction="row" spacing={2}> */}
-      <Box component="section" sx={{ p: 2, border: '1px dashed grey' }}>
-      This Box renders as an HTML section element.
-    </Box>
-      <HighchartsReact
-        highcharts={Highcharts}
-        options={options}
-      />
-      <Box sx={{ flexGrow: 1 }}>
-      <Grid container spacing={2}>
-        <Grid size={8}>
-          <Item>Balance: </Item>
-        </Grid>
-        <Grid size={4}>
-          <Item>Gain/Loss: </Item>
-        </Grid>
-        <Grid size={8}>
-          <Item>Current Position: </Item>
-        </Grid>
-      </Grid>
-    </Box>
-    {/* </Stack> */}
-
+    <Box sx={{ display: 'flex', flexDirection: 'row', width: '90vw', justifyContent: 'center', alignItems: 'flex-start', gap: 2,}}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', width: '60vw', justifyContent: 'center', alignItems: 'center' }}>
+      <Paper sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', mr:5 }}>
+        <Typography>Position Type</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', borderBottom: 1, my: 2 }}>
+          
+        <Button variant="outlined" color="success" sx ={{'&:hover': {backgroundColor: 'green',color: secondaryColor}, mr: 4, my: 2}}>Long</Button>
+        <Button variant="outlined" color="error" sx ={{'&:hover': {backgroundColor: 'red',color: secondaryColor}}}>Short</Button>
+        </Box>
+        <Typography>Position Size</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', borderBottom: 1, my: 2, py:2 }}>
+        $ <TextField label="Amount" type="number" variant="outlined"/>
+        </Box>
+        <Typography>Trade!</Typography>
+         <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', my: 2, py:2 }}>
+        <Button variant="outlined" color="error" sx ={{'&:hover': {backgroundColor: 'red',color: secondaryColor}}}>Close Position</Button>
+      </Box>
+      </Paper>
+      </Box>
+      <Box sx={{ width: '80%'}}>
+        <HighchartsReact
+          highcharts={Highcharts}
+          options={options}
+          containerProps={{ style: { width: '100%', height: '60vh' } }}
+        />
+        <Box sx={{ display: 'inline-flex', flexDirection: 'row', width: '50vw', justifyContent: 'flex-start', flexWrap:'wrap', gap: 2, mt: 2 }}>
+        <Paper sx={{ display: "flex", width: '20vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Balance: </Paper>
+        <Paper sx={{ display: "flex", width: '20vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Gain/Loss: </Paper>
+        <Paper sx={{ display: "flex", width: '40vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Current Position: </Paper>
+        </Box>
+      </Box>
+      </Box>
     </>
   )
 }
