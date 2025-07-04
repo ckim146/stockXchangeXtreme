@@ -22,6 +22,9 @@ function App() {
   const [candleData, setCandleData] = useState([]);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
+  const [posSize, setPosSize] = useState(0);
+  const [gainLoss, setGainLoss] = useState(0);
+  const [startingPrice, setStartingPrice] = useState(0);
   const secondaryColor = 'rgb(240, 240, 255)';
   const mainColor = 'rgb(40, 40, 40)';
   const symbol = 'IBM';
@@ -29,18 +32,18 @@ function App() {
   const dayMs = 24 * 3600 * 1000;
 
   //Config for the marker
-  const markerData = [
-    {
-      x: 3,  // Match a candlestick timestamp
-      y: 230,          // Choose where on the Y-axis to place the marker (e.g., high, close, etc.)
-      marker: {
-        enabled: true,
-        radius: 15,
-        symbol: 'triangle-down',
-        fillColor: 'red'
-      }
-    }
-  ];
+  // const markerData = [
+  //   {
+  //     x: 3,  // Match a candlestick timestamp
+  //     y: 230,          // Choose where on the Y-axis to place the marker (e.g., high, close, etc.)
+  //     marker: {
+  //       enabled: true,
+  //       radius: 15,
+  //       symbol: 'triangle-down',
+  //       fillColor: 'red'
+  //     }
+  //   }
+  // ];
 
   // Init fixed values for X Axis
   const candleInterval = 24 * 60 * 60 * 1000;
@@ -48,7 +51,6 @@ function App() {
   const initialTimestamp = candleData.length > 0 ? candleData[0][0] : Date.now();
   let currentMin = initialTimestamp;
   let currentMax = initialTimestamp + windowSize;
-  console.log('currentMin:', new Date(currentMin), 'currentMax:', new Date(currentMax));
 
 
   //Config for the chart
@@ -154,11 +156,11 @@ function App() {
       enabled: false
     }
   };
-  //For candlestick data: [time?, open, high, low, close]
+  //For candlestick data: [time, open, high, low, close]
 
+  //Set the time series to be daily (to be passed to API call)
   const timeSeries = 'TIME_SERIES_DAILY';
 
-  const [data, setData] = useState([]);
   const requestOptions = {
     method: "GET",
     redirect: "follow"
@@ -169,7 +171,7 @@ function App() {
   let endDate = new Date();
   const priceAvgs = [];
 
-
+  //--------------------------------------- Initializing Functions --------------------------------------- //
   function getDates() {
     while (startDate.getTime() <= endDate.getTime()) {
       dateRange.push(startDate.toISOString().slice(0, 10));
@@ -177,16 +179,27 @@ function App() {
     }
   }
 
+  function calcAverage(num1, num2) {
+    return (num1+num2)/2
+  }
+
 
   async function getData() {
     // const response = await fetch("https://www.alphavantage.co/query?function=" + timeSeries + "&symbol=" + symbol + "&apikey=A843ONHLADSZRCPT", requestOptions);
     // const data = await response.json();
     // console.log(await data);
+
+    //Set an object that consists of all the dates as keys from the API data
     const dateObj = ibmData["Time Series (Daily)"];
 
     //Grab start and end dates from dateBank
     startDate = new Date(dateBank[0][0]);
     endDate = new Date(dateBank[0][1]);
+
+    //Set starting price
+    setStartingPrice(calcAverage(Number(dateObj[endDate.toISOString().split('T')[0]]["1. open"]),
+      Number(dateObj[endDate.toISOString().split('T')[0]]["4. close"])));
+    
 
     // Local tracking variables
     let localMin = Number.POSITIVE_INFINITY;
@@ -194,6 +207,7 @@ function App() {
 
     //Extract average price for date range. Initiate tempdata
     while (startDate <= endDate) {
+      //The date keys are strings in the format of yyyy-mm-dd, extract first date
       let tempData = dateObj[startDate.toISOString().split('T')[0]];
 
       if (tempData) {
@@ -214,14 +228,11 @@ function App() {
         candleData.push(candle);
 
       }
+      //Increment date
       startDate.setDate(startDate.getDate() + 1);
 
-      // console.log("y console: ", candleData.map(c => new Date(c[0]).toISOString()));
-      const exactTimestamp = candleData.find(c => new Date(c[0]).toISOString().startsWith('2025-05-02'))?.[0];
-      console.log(exactTimestamp);
-
     }
-    //Set Y axis min and max
+    //Set initial Y axis min and max
     const yPadding = 5;
     //Set the state variables to the data constructed from API call
     setPriceData(priceAvgs);
@@ -230,7 +241,22 @@ function App() {
     setMaxPrice(localMax + yPadding);
   }
 
+  //Get data when page is first loaded
   useEffect(() => { getData(); }, []);
+
+  //--------------------------------------- Game Mechanics Functions --------------------------------------- //
+
+  //Gain/Loss calculator
+  function calcGainLoss(posSize, startingPrice, newPrice) {
+    //Multiply the position size by the ratio of the starting price and new (current) price
+    let gainLoss = (posSize * (startingPrice / newPrice)) - posSize;
+    return gainLoss
+  }
+
+  //Handler for capturing textfield input for pos size
+  function posSizeChangeHandler(event) {
+    setPosSize(event.target.value);
+  }
 
 
   //Handler for starting the trade
@@ -240,39 +266,46 @@ function App() {
     const lastDateStr = dateBank[0][1];  // "2025-06-02"
     const lastDate = new Date(lastDateStr); // create a Date object
     const nextDate = new Date(lastDate);
+    let i = 0;
+    
+    //init the dynamic TimeStamp. Set to 1 day after last date.
     nextDate.setDate(lastDate.getDate() + 1);  // add 1 day
+    let nextTimestamp = nextDate.getTime();  // milliseconds since epoch
 
-    const nextTimestamp = nextDate.getTime();  // milliseconds since epoch
-    console.log("min max price: ", minPrice, maxPrice);
-
-    const interval = setInterval(() => {
-      const newPoint = [nextTimestamp + 1, 257.85, 263, 257, 263]; // example data
+    const scrollInterval = setInterval(() => {
+      // example data
+      const newPointArray = generateDummyCandleData("2025-06-03", 10);
+      
       const series = chart.series[0];
-      const maxPoints = 1;
-      // const dayMs = 24 * 3600 * 1000;
-      // const fixedMin = new Date(dateBank[0][0]).getTime();
-      // //Pad the Max X value
-      // const range = nextTimestamp - fixedMin;
-      // const paddedMax = nextTimestamp + range * 0.5;
+      const maxPoints = 10;
 
+      //stop animation once the iterations are complete:
+      if (i >= maxPoints) {
+        clearInterval(scrollInterval);
+      }
+
+      //recalc the next date (1 day in ms)
+      nextTimestamp += 3600 * 1000 * 24;
+      
       // Recalculate visible window every tick
       const windowDuration = 30 * 24 * 3600 * 1000; // 30 days in ms
-      const fixedMin = nextTimestamp - windowDuration;
-      const paddedMax = nextTimestamp + (windowDuration * 0.5);
+      const minDate = nextTimestamp - windowDuration;
+      const paddedMaxDate = nextTimestamp + (windowDuration * 0.5);
 
-      chart.xAxis[0].setExtremes(fixedMin, paddedMax, true, false);
+      //Dynamically update extremes to simulate scrolling
+      chart.xAxis[0].setExtremes(minDate, paddedMaxDate, true, false);
       chart.yAxis[0].setExtremes(minPrice, maxPrice, true, false);
 
+      //Iterate through newPointArray, add the new point
+      series.addPoint(newPointArray[i], true, series.data.length >= maxPoints);
+      i+=1;
 
-      series.addPoint(newPoint, true, series.data.length >= maxPoints);
-
-      //Make the axis fixed as points are added
-      chart.yAxis[0].setExtremes(minPrice, maxPrice, true, false);
-      chart.xAxis[0].setExtremes(fixedMin, paddedMax, true, false);
-      clearInterval(interval);
+      console.log(startingPrice);
+      //Calculate gain/loss. The dummy data generator's array: [open, close, high, low]
+      calcGainLoss(posSize, startingPrice, calcAverage(newPointArray[i][1],newPointArray[i][4]))
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(scrollInterval);
   };
 
   //Make a MUI object to center the entire webpage
@@ -304,7 +337,7 @@ function App() {
             </Box>
             <Typography>Position Size</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', borderBottom: 1, my: 2, py: 2 }}>
-              $ <TextField label="Amount" type="number" variant="outlined" />
+              $ <TextField label="Amount" type="number" variant="outlined" value={posSize} onChange={posSizeChangeHandler}/>
             </Box>
             <Typography>Trade!</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', my: 2, py: 2 }}>
