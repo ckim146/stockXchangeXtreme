@@ -5,7 +5,7 @@ import './App.css'
 // import Highcharts, { color } from 'highcharts'
 import * as Highcharts from "highcharts/highstock";
 import HighchartsReact from 'highcharts-react-official'
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import ibmData from './ibmData.json'
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -22,16 +22,15 @@ function App() {
   const [candleData, setCandleData] = useState([]);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
-  const [posSize, setPosSize] = useState();
-  const [posType, setPosType] = useState('');
+  const [posSize, setPosSize] = useState(0);
   const [gainLoss, setGainLoss] = useState(0);
   const [startingPrice, setStartingPrice] = useState(0);
-  const [balance, setBalance] = useState(1000);
   const secondaryColor = 'rgb(240, 240, 255)';
   const mainColor = 'rgb(40, 40, 40)';
   const symbol = 'IBM';
   const chartRef = useRef();
   const dayMs = 24 * 3600 * 1000;
+  const gainLossRef = useRef(0);
 
   //Config for the marker
   // const markerData = [
@@ -53,6 +52,7 @@ function App() {
   const initialTimestamp = candleData.length > 0 ? candleData[0][0] : Date.now();
   let currentMin = initialTimestamp;
   let currentMax = initialTimestamp + windowSize;
+  const iRef = useRef(0);
 
 
   //Config for the chart
@@ -182,7 +182,7 @@ function App() {
   }
 
   function calcAverage(num1, num2) {
-    return (num1+num2)/2
+    return (num1 + num2) / 2
   }
 
 
@@ -201,7 +201,7 @@ function App() {
     //Set starting price
     setStartingPrice(calcAverage(Number(dateObj[endDate.toISOString().split('T')[0]]["1. open"]),
       Number(dateObj[endDate.toISOString().split('T')[0]]["4. close"])));
-    
+
 
     // Local tracking variables
     let localMin = Number.POSITIVE_INFINITY;
@@ -244,55 +244,72 @@ function App() {
   }
 
   //Get data when page is first loaded
-  useEffect(() => { getData(); }, []);
+  useEffect(() => { getData();}, []);
 
   //--------------------------------------- Game Mechanics Functions --------------------------------------- //
 
   //Gain/Loss calculator
   function calcGainLoss(posSize, startingPrice, newPrice) {
     //Multiply the position size by the ratio of the starting price and new (current) price
-    if (posType == 'long') {
-
-    }
     let gainLoss = (posSize * (startingPrice / newPrice)) - posSize;
     return gainLoss
   }
 
-  //Handler for capturing textfield input for pos size
-  function posSizeChangeHandler(event) {
-    setPosSize(event.target.value);
-    console.log(posType);
+  // //Handler for capturing textfield input for pos size
+  function posSizeChangeHandler(e) {
+    setPosSize(e.target.value);
   }
 
 
+  const intervalIdRef = useRef(null);
   //Handler for starting the trade
   function handleTradeClick() {
+    
+
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+
     const chart = chartRef.current?.chart;
     if (!chart) return;
+
     const lastDateStr = dateBank[0][1];  // "2025-06-02"
     const lastDate = new Date(lastDateStr); // create a Date object
     const nextDate = new Date(lastDate);
-    let i = 0;
+    // let i = 0;
+    iRef.current = 0; 
     
+
     //init the dynamic TimeStamp. Set to 1 day after last date.
     nextDate.setDate(lastDate.getDate() + 1);  // add 1 day
     let nextTimestamp = nextDate.getTime();  // milliseconds since epoch
 
-    const scrollInterval = setInterval(() => {
-      // example data
-      const newPointArray = generateDummyCandleData("2025-06-03", 10);
+    // example data
+    const newPointArray = generateDummyCandleData("2025-06-03", 10);
+
+    intervalIdRef.current = setInterval(() => {
+    //const scrollInterval = setInterval(() => {
       
       const series = chart.series[0];
       const maxPoints = 10;
 
       //stop animation once the iterations are complete:
-      if (i >= maxPoints) {
-        clearInterval(scrollInterval);
+      // if (iRef.current >= maxPoints) {
+      //   clearInterval(scrollInterval);
+      //   return
+      // }
+      console.log(iRef.current);
+      if (iRef.current >= maxPoints) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+        setGainLoss(gainLossRef.current); // final update if needed
+        return;
       }
 
       //recalc the next date (1 day in ms)
       nextTimestamp += 3600 * 1000 * 24;
-      
+
       // Recalculate visible window every tick
       const windowDuration = 30 * 24 * 3600 * 1000; // 30 days in ms
       const minDate = nextTimestamp - windowDuration;
@@ -303,24 +320,25 @@ function App() {
       chart.yAxis[0].setExtremes(minPrice, maxPrice, true, false);
 
       //Iterate through newPointArray, add the new point
-      series.addPoint(newPointArray[i], true, series.data.length >= maxPoints);
-      i+=1;
-
-      console.log(startingPrice);
+      series.addPoint(newPointArray[iRef.current], true, series.data.length >= maxPoints);
+      
+      console.log("point[1] (open):", newPointArray[iRef.current][1], "point[4] (low):", newPointArray[iRef.current][4]);
       //Calculate gain/loss. The dummy data generator's array: [open, close, high, low]
-      setGainLoss(calcGainLoss(posSize, startingPrice, calcAverage(newPointArray[i][1],newPointArray[i][4])));
-      console.log(gainLoss);
+
+      const numericPosSize = parseFloat(posSize);
+      const newGainLoss = (calcGainLoss(numericPosSize, startingPrice, calcAverage(newPointArray[iRef.current][1], newPointArray[iRef.current][4])));
+      gainLossRef.current = newGainLoss;
+      setGainLoss(newGainLoss);
+
+      iRef.current += 1;
+      
     }, 1000);
 
-    return () => clearInterval(scrollInterval);
-  };
-
-  function handleCloseClick() {
-
+    // return () => clearInterval(scrollInterval);
   }
 
   //Make a MUI object to center the entire webpage
-  function CenteredBox({ children }) {
+  const CenteredBox = memo( function CenteredBox({ children }) {
     return (
       <Box
         sx={{
@@ -333,46 +351,44 @@ function App() {
         {children}
       </Box>
     );
-  }
+  });
+
+//   function PositionSizeInput({ posSize, setPosSize }) {
+//   const handleChange = (e) => {
+//     const value = e.target.value;
+//     setPosSize(value);
+//   };
+
+//   return (
+//     <TextField
+//       label="Amount"
+//       type="number"
+//       variant="outlined"
+//       value={posSize}
+//       onChange={handleChange}
+//     />
+//   );
+// }
+
+const TradeControls = memo(() => {
+
+  return (
+    <Box>
+      <TextField
+        value={posSize}
+        onChange={(e) => setPosSize(e.target.value)}
+      />
+    </Box>
+  );
+});
+
 
   return (
     <CenteredBox>
-      <Box sx={{ display: 'flex', flexDirection: 'row', width: '90vw', justifyContent: 'center', alignItems: 'flex-start', gap: 2, }}>
-        <Box sx={{ display: 'flex', flexDirection: 'row', width: '60vw', justifyContent: 'center', alignItems: 'center' }}>
-          <Paper sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', mr: 5 }}>
-            <Typography>Position Type</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', borderBottom: 1, my: 2 }}>
 
-              <Button variant= {posType=== 'long' ? 'contained' : 'outlined'} color="success" onClick={() => setPosType('long')} sx={{ '&:hover': { backgroundColor: 'green', color: secondaryColor }, mr: 4, my: 2 }}>Long</Button>
-              <Button variant={posType === 'short' ? 'contained' : 'outlined'}color="error" onClick={() => setPosType('short')} sx={{ '&:hover': { backgroundColor: 'red', color: secondaryColor } }}>Short</Button>
-            </Box>
-            <Typography>Position Size</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center', borderBottom: 1, my: 2, py: 2 }}>
-              $ <TextField label="Amount" type="number" variant="outlined" value={posSize} onChange={posSizeChangeHandler}/>
+              $ <TextField label="Amount" type="number" variant="outlined" value={posSize} onChange={posSizeChangeHandler} />
             </Box>
-            <Typography>Trade!</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', justifyContent: 'center', alignItems: 'center', my: 2, py: 2 }}>
-              <Button variant="outlined" color="success" sx={{ '&:hover': { backgroundColor: 'green', color: secondaryColor }, my: 3 }} onClick={handleTradeClick}>Let's Trade!</Button>
-              <Button variant="outlined" color="error" sx={{ '&:hover': { backgroundColor: 'red', color: secondaryColor } }} >Close Position</Button>
-
-            </Box>
-          </Paper>
-        </Box>
-        <Box sx={{ width: '80%' }}>
-          <HighchartsReact
-            highcharts={Highcharts}
-            constructorType={'stockChart'}
-            options={options}
-            ref={chartRef}
-            containerProps={{ style: { width: '100%', height: '60vh' } }}
-          />
-          <Box sx={{ display: 'inline-flex', flexDirection: 'row', width: '50vw', justifyContent: 'flex-start', flexWrap: 'wrap', gap: 2, mt: 2 }}>
-            <Paper sx={{ display: "flex", width: '20vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Balance: {balance}</Paper>
-            <Paper sx={{ display: "flex", width: '20vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Gain/Loss: </Paper>
-            <Paper sx={{ display: "flex", width: '40vw', height: '5vh', justifyContent: 'flex-start', alignItems: 'center', m: 2, p: 1 }}>Current Position: </Paper>
-          </Box>
-        </Box>
-      </Box>
     </CenteredBox>
   )
 }

@@ -14,7 +14,6 @@ export function generateDummyCandleData(startDateStr, numDays) {
 
     data.push([time, round(open), round(high), round(low), round(close)]);
   }
-  console.log(data);
   return data;
 
   // Helpers
